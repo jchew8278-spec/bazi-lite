@@ -1,0 +1,402 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>八字五行 · 私人版（Julie）</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,Apple Color Emoji;max-width:900px;margin:24px auto;padding:0 14px;line-height:1.55}
+  h1{font-size:20px;margin:8px 0 4px}
+  .sub{color:#666;font-size:13px;margin:0 0 14px}
+  .card{border:1px solid #eee;border-radius:12px;padding:14px;margin:12px 0;background:#fff}
+  label{display:block;margin:10px 0 6px}
+  input,select,button,textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px;font-size:16px}
+  button{cursor:pointer}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .muted{color:#777;font-size:13px}
+  .mono{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
+  .pill{display:inline-block;padding:2px 8px;border:1px solid #eee;border-radius:999px;margin-right:6px;font-size:12px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js"></script>
+</head>
+<body>
+<h1>八字五行 · 私人版（Julie）</h1>
+<p class="sub">输入生日 → 一键生成可复制的<strong>五行解说</strong>、<strong>性格</strong>、<strong>数字吉凶</strong>与<strong>水晶/喷雾香水/挂件建议</strong>（含颜色/方位/贵人）</p>
+
+<div class="card">
+  <div class="row">
+    <div>
+      <label>命主姓名（可留空）</label>
+      <input id="name" placeholder="例：王小明"/>
+    </div>
+    <div>
+      <label>性别（可留空）</label>
+      <select id="gender">
+        <option value="">不填</option><option>男</option><option>女</option>
+      </select>
+    </div>
+  </div>
+
+  <label>公历生日（必填）</label>
+  <input id="date" type="date"/>
+
+  <div class="row">
+    <div>
+      <label>出生时间（未知可选“未知”）</label>
+      <select id="time">
+        <option value="">未知</option>
+        <option>00:00</option><option>01:00</option><option>02:00</option><option>03:00</option>
+        <option>04:00</option><option>05:00</option><option>06:00</option><option>07:00</option>
+        <option>08:00</option><option>09:00</option><option>10:00</option><option>11:00</option>
+        <option>12:00</option><option>13:00</option><option>14:00</option><option>15:00</option>
+        <option>16:00</option><option>17:00</option><option>18:00</option><option>19:00</option>
+        <option>20:00</option><option>21:00</option><option>22:00</option><option>23:00</option>
+      </select>
+    </div>
+    <div>
+      <label>出生地时区（默认UTC+8 马来西亚/新加坡）</label>
+      <select id="tz">
+        <option value="8" selected>UTC+8</option>
+        <option value="7">UTC+7</option><option value="9">UTC+9</option>
+        <option value="0">UTC±0</option><option value="-5">UTC-5</option><option value="-8">UTC-8</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>查看哪一年的流年（默认当前年）</label>
+      <input id="flowYear" type="number" min="1900" max="2100"/>
+    </div>
+    <div>
+      <label>输出语气</label>
+      <select id="tone">
+        <option value="gentle" selected>温柔安定</option>
+        <option value="professional">专业稳重</option>
+        <option value="concise">简洁明快</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- 数字分析输入框 -->
+  <label style="margin-top:12px">车牌号码（可留空）</label>
+  <input id="car" placeholder="例：ABC1234、1234 等"/>
+
+  <label>手机号码（可留空）</label>
+  <input id="phone" placeholder="例：0123456789"/>
+
+  <label>门牌号码（可留空）</label>
+  <input id="house" placeholder="例：25、103、8"/>
+
+  <div style="margin-top:12px">
+    <button onclick="run()">生成解说</button>
+  </div>
+</div>
+
+<div class="card">
+  <label>八字排盘（参考）</label>
+  <pre id="chart" class="mono" style="white-space:pre-wrap"></pre>
+  <div id="tags"></div>
+</div>
+
+<div class="card">
+  <label>可复制给命主的 WhatsApp 文案（温柔版）</label>
+  <textarea id="wa" rows="20" class="mono"></textarea>
+  <div class="row" style="margin-top:10px">
+    <button onclick="copyWA()">复制解说</button>
+    <button onclick="downloadTxt()">下载TXT</button>
+  </div>
+  <p class="muted">本工具为<strong>八字五行解说</strong>与流年/数字/喷雾香水参考；仅供身心灵用途。</p>
+</div>
+
+<script>
+/* —— 数字→五行 —— */
+const NUM_FIVE = { 木:[3,8], 火:[2,7], 土:[5,0], 金:[4,9], 水:[1,6] };
+/* —— 通灵组合（并列参考） —— */
+const NUM_MAGIC = { 吉:['1 贵人','6 顺','8 聚财','9 长久','168 旺财','689 旺财','19 贵人快','79 贵人快'], 忌:['34 易冲','38 破财','78 起伏大'] };
+
+/* —— 颜色 / 方位 / 贵人 —— */
+const COLOR_MAP = {
+  木:['绿色','青色','翠绿'],
+  火:['红色','橙色','紫红'],
+  土:['黄色','咖啡色','米色','棕色'],
+  金:['白色','金色','银色','灰'],
+  水:['黑色','深蓝','藏青']
+};
+const DIR_MAP = { 木:['东方','东南'], 火:['南方'], 土:['东北','西南'], 金:['西方','西北'], 水:['北方'] };
+const ALLY_ZODIAC = { 木:['虎','兔'], 火:['蛇','马'], 土:['龙','牛','羊','狗'], 金:['猴','鸡'], 水:['鼠','猪'] };
+
+/* —— Julie 专用水晶 —— */
+const CRYSTALS = {
+  金:['白水晶','白钛晶','金发晶','白水晶晶中晶'],
+  木:['东陵玉','绿草莓晶','葡萄石'],
+  水:['黑曜石','黑色电气石','海蓝宝','月光石','蓝虎眼石'],
+  火:['太阳石','南红玛瑙','红发晶'],
+  土:['黄水晶','虎眼石','茶晶','蜜蜡']
+};
+const FEATURE_SET = {
+  护身:['黑曜石','金曜石','黑色电气石','蓝虎眼石','茶晶'],
+  化煞:['黑曜石','金曜石','虎眼石','茶晶','蓝虎眼石'],
+  财运:['黄水晶','金发晶','虎眼石','白水晶'],
+  贵人:['白水晶','紫水晶','绿草莓晶'],
+  人缘:['粉晶','绿草莓晶','月光石','白水晶'],
+  感情:['粉晶','紫水晶','月光石','葡萄石'],
+  桃花:['粉晶','绿草莓晶','东陵玉','白水晶']
+};
+const CHARMS=['金色福袋','紫水晶钱袋子','太阳石貔貅','乾隆通宝古币','五帝钱','算盘','莲花牌'];
+
+/* —— 喷雾香水：按五行的“安全调香库”（避免刺激性过强的热性精油） —— */
+const SPRAY_OILS = {
+  木:['佛手','罗勒','尤加利'],
+  火:['迷迭香','姜'],           // 火系尽量温和用量
+  土:['广藿香','岩兰草','雪松'],
+  金:['乳香','檀香','没药'],
+  水:['薰衣草','依兰','蓝胶尤加利']
+};
+
+/* 生成 10 ml 喷雾配方：
+   - 默认 3%（6–8 滴），酒精 7 ml + 水/纯露 2–3 ml
+   - 若弱项=1：3+3+2 配比
+   - 若弱项=2：4+4（各两款 2+2）或 3+3+2+0
+   - 若弱项≥3：平均分配到 8 滴
+*/
+function mkSprayPlan(weakKeys){
+  const base = {alcohol:7, water:3}; // ml
+  const totalDrops = 8;               // 3% 强度
+  const pick = (arr,n)=>arr.slice(0,Math.min(n,arr.length));
+
+  const plan = [];
+  if(!weakKeys.length){
+    // 均衡：做一支“安定通用”
+    plan.push(['薰衣草',3],['乳香',3],['佛手',2]);
+  }else if(weakKeys.length===1){
+    const oils = pick(SPRAY_OILS[weakKeys[0]],3);
+    const dist = [3,3,2];
+    oils.forEach((o,i)=>plan.push([o,dist[i]||0]));
+  }else if(weakKeys.length===2){
+    const a=pick(SPRAY_OILS[weakKeys[0]],2), b=pick(SPRAY_OILS[weakKeys[1]],2);
+    const dist=[2,2,2,2]; const mix=a.concat(b).slice(0,4);
+    mix.forEach((o,i)=>plan.push([o,dist[i]]));
+  }else{
+    // 3 个以上：平均发放 2+2+2+1+1…
+    const pool = weakKeys.flatMap(k=>pick(SPRAY_OILS[k],2));
+    const dist=[2,2,2,1,1,0,0,0];
+    pool.slice(0,dist.length).forEach((o,i)=>{ if(dist[i]>0) plan.push([o,dist[i]]);});
+    // 若还没满 8 滴，用薰衣草补齐
+    const used = plan.reduce((s,[_o,d])=>s+d,0);
+    if(used<totalDrops) plan.push(['薰衣草', totalDrops-used]);
+  }
+
+  return {
+    title:'喷雾香水（10ml · 3%）',
+    alcohol:base.alcohol,
+    water:base.water,
+    drops:totalDrops,
+    lines:plan.map(([o,d])=>`${o} ${d}滴`)
+  };
+}
+
+/* 另外给两档可选浓度（同配比缩放到 1%/5%） */
+function scaleSprayLines(lines, targetDrops){
+  // lines: ["薰衣草 3滴",...]
+  const parse = s=>({name:s.split(' ')[0], n:parseInt(s.match(/(\d+)滴/)[1],10)});
+  const items = lines.map(parse);
+  const total = items.reduce((s,x)=>s+x.n,0) || 1;
+  return items.map(x=>{
+    const n = Math.max(1, Math.round(x.n/total*targetDrops));
+    return `${x.name} ${n}滴`;
+  });
+}
+
+/* —— 工具 —— */
+function onlyDigits(str){ return (str||'').replace(/\D/g,''); }
+function numToFive(str){
+  const digits = onlyDigits(str).split('').map(Number);
+  if(!digits.length) return null;
+  const count={木:0,火:0,土:0,金:0,水:0};
+  digits.forEach(d=>{ for(const k in NUM_FIVE){ if(NUM_FIVE[k].includes(d)) count[k]++; }});
+  return count;
+}
+
+/* —— 主流程 —— */
+function run(){
+  const name=(document.getElementById('name').value.trim()||'你');
+  const gender=document.getElementById('gender').value;
+  const date=document.getElementById('date').value;
+  const time=document.getElementById('time').value;
+  const tz=parseInt(document.getElementById('tz').value,10)||8;
+  const car=document.getElementById('car').value.trim();
+  const phone=document.getElementById('phone').value.trim();
+  const house=document.getElementById('house').value.trim();
+  const enteredYear=(document.getElementById('flowYear').value||'').trim();
+  let year=enteredYear?parseInt(enteredYear,10):null;
+
+  if(!date){alert('请先选择公历生日');return;}
+  const loc=new Date(date+'T'+(time||'12:00')+':00');
+
+  const y=loc.getFullYear(), m=loc.getMonth()+1, day=loc.getDate();
+  const solar=Solar.fromYmdHms(y,m,day,0,0,0);
+  const lunar=solar.getLunar();
+  const ec=lunar.getEightChar();
+  const yearGZ=ec.getYear(), monthGZ=ec.getMonth(), dayGZ=ec.getDay();
+  const timeGZ=(time?ec.getTime():'（未知）');
+
+  if(!year){year=(new Date()).getFullYear();}
+  const liuYearGZ=Lunar.fromYmd(year,1,1).getYearInGanZhi();
+
+  // 五行计分（简化）
+  const G={甲:'木',乙:'木',丙:'火',丁:'火',戊:'土',己:'土',庚:'金',辛:'金',壬:'水',癸:'水'};
+  const Z={子:'水',丑:'土',寅:'木',卯:'木',辰:'土',巳:'火',午:'火',未:'土',申:'金',酉:'金',戌:'土',亥:'水'};
+  const sc={金:0,木:0,水:0,火:0,土:0};
+  [yearGZ,monthGZ,dayGZ,(time?timeGZ:'')].forEach(gz=>{
+    if(!gz) return; sc[G[gz[0]]]++; sc[Z[gz[1]]]++; });
+  const arr=Object.entries(sc).sort((a,b)=>b[1]-a[1]);
+  const max=arr[0][1], min=arr[arr.length-1][1];
+  const strong=arr.filter(([k,v])=>v===max).map(x=>x[0]);
+  const weak=arr.filter(([k,v])=>v===min).map(x=>x[0]);
+
+  // 性格
+  function temperament(){
+    const lines=[];
+    if(strong.includes('火')) lines.push('火旺：热情快、行动力强、表达直接，但要注意情绪起伏与过劳。');
+    if(strong.includes('金')) lines.push('金旺：原则感强、重效率、做事利落，提醒自己说话别太直。');
+    if(strong.includes('木')) lines.push('木旺：有理想、有耐性、重人情，容易顾全大局却忘了自己。');
+    if(strong.includes('水')) lines.push('水旺：敏感细腻、洞察高、直觉好，注意别想太多。');
+    if(strong.includes('土')) lines.push('土旺：稳重靠谱、能扛事、耐心好，提防拖延与顾虑过多。');
+    if(weak.length){ lines.push(`目前偏弱：${weak.join('、')} → 优先补${weak.join('、')}会更顺。`); }
+    return lines.join('\n- ');
+  }
+
+  // 数字分析
+  function analyseNum(label,value){
+    const n = onlyDigits(value);
+    if(!n) return null;
+    const f = numToFive(value);
+    const best = Object.entries(f).sort((a,b)=>b[1]-a[1])[0][0];
+    return `- ${label}（${value}）偏 ${best}`;
+  }
+  const carInfo = analyseNum('车牌',car);
+  const phoneInfo = analyseNum('手机',phone);
+  const houseInfo = analyseNum('门牌',house);
+
+  // 数字建议
+  const suggestDigits = (weak.length? weak.map(w=>NUM_FIVE[w]).flat() : [1,6,4,9]).filter((v,i,a)=>a.indexOf(v)===i);
+  const suggestMagic = ['168','689','19','79'];
+
+  // 颜色/方位/贵人
+  function join(arr){return arr.join('、');}
+  const colorList = weak.length ? join([...(new Set(weak.map(w=>COLOR_MAP[w]).flat()))]) : '黑/白/金/棕为主，点缀红/绿按心情调整';
+  const carColors = weak.length ? colorList : '白/黑/金/棕（稳场耐看）';
+  const walletColors = (weak.includes('土')||weak.includes('金')) ? join([...new Set([...(COLOR_MAP['土']||[]),...(COLOR_MAP['金']||[])])]) : '金色/棕色/黑色更稳财';
+  const dirs = weak.length ? join([...(new Set(weak.map(w=>DIR_MAP[w]).flat()))]) : '东南/西北任选其一为主向';
+  const allies = weak.length ? join([...(new Set(weak.map(w=>ALLY_ZODIAC[w]).flat()))]) : '虎、兔、猴、鸡、鼠、猪（择其一即可）';
+
+  // 自动喷雾配方
+  const spray = mkSprayPlan(weak);
+  const spray1 = {title:'喷雾香水（10ml · 1% 轻香）', alcohol:7, water:3, drops:3, lines:scaleSprayLines(spray.lines,3)};
+  const spray2 = spray; // 3% 默认
+  const spray3 = {title:'喷雾香水（10ml · 5% 浓香）', alcohol:7.5, water:2, drops:12, lines:scaleSprayLines(spray.lines,12)};
+
+  // 顶部排盘
+  const chart=[
+    `年柱：${yearGZ}　月柱：${monthGZ}　日柱：${dayGZ}　时柱：${timeGZ}`,
+    `五行计分（简化·内部参考）：金${sc.金} 木${sc.木} 水${sc.水} 火${sc.火} 土${sc.土}`,
+    `流年（${year}）：${liuYearGZ}年`
+  ].join('\n');
+  document.getElementById('chart').textContent=chart;
+
+  // Header
+  const titleText = enteredYear ? `${year}流年·五行解说` : `八字·五行解说`;
+
+  // 数字区块
+  let numBlock = `🔢 数字吉凶 & 建议（五行＋通灵并列参考）
+五行数字：木3/8；火2/7；土5/0；金4/9；水1/6
+通灵组合：1贵人、6顺、8聚财、9长久；168/689旺财；19/79贵人快
+适合出现的数字：${suggestDigits.join('、')}
+建议组合：${suggestMagic.join(' / ')}
+`;
+  if(carInfo||phoneInfo||houseInfo){
+    numBlock += `已填数字的倾向：
+${carInfo||''}
+${phoneInfo||''}
+${houseInfo||''}
+（数字偏弱不代表不行；需要时可用水晶/挂件/颜色来补）`;
+  }
+
+  // 性格/颜色/方位/贵人
+  const personalityBlock = `🧠 性格 & 五行
+- ${temperament() || '结构平衡：做事稳、想法清，保持节奏即可。'}
+
+🎨 颜色建议
+- 日常色：${colorList}
+- 车身色：${carColors}
+- 钱包色：${walletColors}
+
+📍 方位 & 贵人
+- 有利方位（坐/面向优先）：${dirs}
+- 贵人生肖：${allies}`;
+
+  // 水晶与模式
+  const charm1=CHARMS[Math.floor(Math.random()*CHARMS.length)];
+  const charm2=CHARMS[Math.floor(Math.random()*CHARMS.length)];
+  const crystalBlock = `💎 水晶策略
+${(weak.length? weak.map(w=>`· 补${w}：${CRYSTALS[w].join(' / ')}`).join('\n') : '当前结构偏均衡，可用白水晶＋紫水晶做日常稳频。')}
+左手（贵人/财运）：补弱为主，配紫水晶；可加「${charm1}」
+右手（护身/稳场）：黑曜石/金曜石/电气石；可加「${charm2}」
+
+🧩 四种模式
+① 日常：白水晶打底 + 补弱各1～2颗
+② 开运：黄水晶/金发晶/虎眼石 + 白/紫水晶，配钱袋/福袋
+③ 灵修：白水晶 + 紫水晶（中心珠/钱袋子）
+④ 应急：黑曜石/金曜石/电气石 + 茶晶（完事换回日常）`;
+
+  // 自动喷雾香水文本
+  function sprayLinesText(s){ return `${s.title}
+- 酒精 ${s.alcohol} ml + 蒸馏水/纯露 ${s.water} ml
+- 精油共 ${s.drops} 滴：${s.lines.join(' + ')}`; }
+
+  const sprayText = `🌬 喷雾香水 · 自动配方（按偏弱五行生成）
+${sprayLinesText(spray2)}
+
+可选浓度：
+${sprayLinesText(spray1)}
+${sprayLinesText(spray3)}
+（调配顺序：先滴精油到酒精 → 摇匀 → 再加水/纯露 → 静置 24h～3天更柔和）`;
+
+  // WhatsApp 文案
+  const wa = [
+    `🌿 ${name}${gender?(' · '+gender):''}｜${titleText}`,
+    ``,
+    `公历生日：${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')} ${time||'时间未知'}（UTC${tz>=0?'+':''}${tz}）`,
+    `五行计分：金${sc.金} 木${sc.木} 水${sc.水} 火${sc.火} 土${sc.土}`,
+    `偏旺：${strong.join('/')||'—'}　偏弱：${weak.join('/')||'—'}`,
+    ``,
+    numBlock,
+    ``,
+    personalityBlock,
+    ``,
+    crystalBlock,
+    ``,
+    sprayText,
+    ``,
+    `🔖 挂件：钱袋/福袋/五帝钱/貔貅/古币/莲花牌/算盘`,
+    ``,
+    `💬 温柔结语
+数字、颜色、方位、水晶、香水都是帮你“稳住自己”的工具。保持节奏、机会自然来。`
+  ].join('\n');
+
+  document.getElementById('wa').value = wa;
+
+  // 顶部标签
+  document.getElementById('tags').innerHTML =
+    `<span class="pill">偏旺：${strong.join('/')||'—'}</span>
+     <span class="pill">偏弱：${weak.join('/')||'—'}</span>
+     <span class="pill">数字/颜色/方位/喷雾已启用</span>`;
+}
+
+/* —— 辅助按钮 —— */
+function copyWA(){ const el=document.getElementById('wa'); el.select(); el.setSelectionRange(0,99999); document.execCommand('copy'); alert('已复制，可以直接贴到 WhatsApp。'); }
+function downloadTxt(){ const blob=new Blob([document.getElementById('wa').value],{type:'text/plain;charset=utf-8'}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bazi_wa.txt'; a.click(); }
+</script>
+</body>
+</html>
