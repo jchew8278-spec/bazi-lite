@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>八字五行 · 私人版（Julie）</title>
+<style>
+  body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Helvetica,Arial,Apple Color Emoji;max-width:900px;margin:24px auto;padding:0 14px;line-height:1.55}
+  h1{font-size:20px;margin:8px 0 4px}
+  .sub{color:#666;font-size:13px;margin:0 0 14px}
+  .card{border:1px solid #eee;border-radius:12px;padding:14px;margin:12px 0;background:#fff}
+  label{display:block;margin:10px 0 6px}
+  input,select,button,textarea{width:100%;padding:10px;border:1px solid #ddd;border-radius:10px;font-size:16px}
+  button{cursor:pointer}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .muted{color:#777;font-size:13px}
+  .mono{font-family:ui-monospace,Menlo,Monaco,Consolas,monospace}
+  .pill{display:inline-block;padding:2px 8px;border:1px solid #eee;border-radius:999px;margin-right:6px;font-size:12px}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/lunar-javascript/lunar.js"></script>
+</head>
+<body>
+<h1>八字五行 · 私人版（Julie）</h1>
+<p class="sub">输入生日 → 一键生成可复制的<strong>五行解说</strong>与<strong>水晶/精油建议</strong>（支持流年、左右手与挂件）</p>
+
+<div class="card">
+  <div class="row">
+    <div>
+      <label>命主姓名（可留空）</label>
+      <input id="name" placeholder="例：王小明"/>
+    </div>
+    <div>
+      <label>性别（可留空）</label>
+      <select id="gender">
+        <option value="">不填</option><option>男</option><option>女</option>
+      </select>
+    </div>
+  </div>
+
+  <label>公历生日（必填）</label>
+  <input id="date" type="date"/>
+
+  <div class="row">
+    <div>
+      <label>出生时间（未知可选“未知”）</label>
+      <select id="time">
+        <option value="">未知</option>
+        <option>00:00</option><option>01:00</option><option>02:00</option><option>03:00</option>
+        <option>04:00</option><option>05:00</option><option>06:00</option><option>07:00</option>
+        <option>08:00</option><option>09:00</option><option>10:00</option><option>11:00</option>
+        <option>12:00</option><option>13:00</option><option>14:00</option><option>15:00</option>
+        <option>16:00</option><option>17:00</option><option>18:00</option><option>19:00</option>
+        <option>20:00</option><option>21:00</option><option>22:00</option><option>23:00</option>
+      </select>
+    </div>
+    <div>
+      <label>出生地时区（默认UTC+8 马来西亚/新加坡）</label>
+      <select id="tz">
+        <option value="8" selected>UTC+8</option>
+        <option value="7">UTC+7</option><option value="9">UTC+9</option>
+        <option value="0">UTC±0</option><option value="-5">UTC-5</option><option value="-8">UTC-8</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="row">
+    <div>
+      <label>查看哪一年的流年（默认当前年）</label>
+      <input id="flowYear" type="number" min="1900" max="2100"/>
+    </div>
+    <div>
+      <label>输出语气</label>
+      <select id="tone">
+        <option value="gentle" selected>温柔安定</option>
+        <option value="professional">专业稳重</option>
+        <option value="concise">简洁明快</option>
+      </select>
+    </div>
+  </div>
+
+  <div style="margin-top:12px">
+    <button onclick="run()">生成解说</button>
+  </div>
+</div>
+
+<div class="card">
+  <label>八字排盘（参考）</label>
+  <pre id="chart" class="mono" style="white-space:pre-wrap"></pre>
+  <div id="tags"></div>
+</div>
+
+<div class="card">
+  <label>可复制给命主的 WhatsApp 文案（温柔版）</label>
+  <textarea id="wa" rows="20" class="mono"></textarea>
+  <div class="row" style="margin-top:10px">
+    <button onclick="copyWA()">复制解说</button>
+    <button onclick="downloadTxt()">下载TXT</button>
+  </div>
+  <p class="muted">本工具为<strong>八字五行解说</strong>与流年参考；仅供身心灵参考，不构成医疗/财务/法律建议。</p>
+</div>
+
+<script>
+/* —— Julie 专用素材库 —— */
+const CRYSTALS = {
+  金:['白水晶','白钛晶','金发晶','白水晶晶中晶'],
+  木:['东陵玉','绿草莓晶','葡萄石'],
+  水:['黑曜石','黑色电气石','海蓝宝','月光石','蓝虎眼石'],
+  火:['太阳石','南红玛瑙','红发晶'],
+  土:['黄水晶','虎眼石','茶晶','蜜蜡']
+};
+const FEATURE_SET = {
+  护身:['黑曜石','金曜石','黑色电气石','蓝虎眼石','茶晶'],
+  化煞:['黑曜石','金曜石','虎眼石','茶晶','蓝虎眼石'],
+  财运:['黄水晶','金发晶','虎眼石','白水晶'],
+  贵人:['白水晶','紫水晶','绿草莓晶'],
+  情绪:['紫水晶','月光石','葡萄石','东陵玉'],
+  健康:['白水晶','茶晶','蜜蜡','海蓝宝'],
+  人缘:['粉晶','绿草莓晶','月光石','白水晶'],
+  感情:['粉晶','紫水晶','月光石','葡萄石'],
+  桃花:['粉晶','绿草莓晶','东陵玉','白水晶']
+};
+const CHARMS = ['金色福袋（“福”/铃铛）','紫水晶钱袋子','太阳石貔貅','乾隆通宝古币','五帝钱','算盘','莲花牌'];
+const OILS = {
+  金:['乳香','檀香','没药'], 木:['罗勒','尤加利','佛手'],
+  水:['薰衣草','依兰','蓝胶尤加利'], 火:['肉桂','迷迭香','姜'],
+  土:['广藿香','岩兰草','雪松']
+};
+
+function mkOilPlan(weakKeys){
+  const pick=(arr,n)=>arr.slice(0,Math.max(1,Math.min(n,arr.length)));
+  const plans=[]; const drops=pairs=>pairs.map(x=>`${x[0]} ${x[1]}滴`).join(' + ');
+  if(weakKeys.length){
+    const pairs=[]; weakKeys.forEach(k=>{ const oils=pick(OILS[k],2); pairs.push([oils[0],8],[oils[1],6]); });
+    pairs.push(['乳香',4]);
+    plans.push({name:'日常平衡（10ml）',desc:`荷荷巴 8ml + ${drops(pairs)}（总约40～45滴）`});
+  }else{
+    plans.push({name:'日常平衡（10ml）',desc:`荷荷巴 8ml + 薰衣草 12滴 + 乳香 8滴 + 檀香 6滴 + 岩兰草 4滴 + 佛手 6滴（约36～40滴）`});
+  }
+  plans.push({name:'重要会谈/签约（10ml）',desc:`荷荷巴 8ml + 乳香 10滴 + 檀香 8滴 + 迷迭香 6滴 + 佛手 6滴 +（按“补弱”任一 6～8滴）`});
+  plans.push({name:'睡前/情绪安定（10ml）',desc:`荷荷巴 8ml + 薰衣草 12滴 + 依兰 6滴 + 岩兰草 4滴 + 雪松 6滴 + 白柑/佛手 6滴`});
+  return plans;
+}
+
+/* —— 简化计分模型 —— */
+function wzOf(gz){
+  const gan=gz.substring(0,1), zhi=gz.substring(1,2);
+  const G={甲:'木',乙:'木',丙:'火',丁:'火',戊:'土',己:'土',庚:'金',辛:'金',壬:'水',癸:'水'};
+  const Z={子:'水',丑:'土',寅:'木',卯:'木',辰:'土',巳:'火',午:'火',未:'土',申:'金',酉:'金',戌:'土',亥:'水'};
+  return [G[gan],Z[zhi]];
+}
+function scoreFive(eight){
+  const sc={金:0,木:0,水:0,火:0,土:0};
+  [eight.y,eight.m,eight.d,eight.t].forEach(gz=>{ if(!gz) return; const [a,b]=wzOf(gz); sc[a]++; sc[b]++; });
+  return sc;
+}
+function pickRec(sc){
+  const entries=Object.entries(sc).sort((a,b)=>b[1]-a[1]);
+  const maxV=entries[0][1], minV=entries[entries.length-1][1];
+  const strong=entries.filter(([k,v])=>v===maxV).map(x=>x[0]);
+  const weak=entries.filter(([k,v])=>v===minV).map(x=>x[0]);
+  const crystalLines=(weak.length? weak.map(w=>`· 补${w}：${CRYSTALS[w].join(' / ')}`).join('\n') : '· 当前结构较均衡，可用白水晶 + 紫水晶做日常稳频。');
+  return {strong,weak,crystalLines};
+}
+function two(n){return n<10?'0'+n:n}
+function pickSome(arr,n){ const a=[...arr], out=[]; while(a.length&&out.length<n){ const i=Math.floor(Math.random()*a.length); out.push(a.splice(i,1)[0]); } return out; }
+
+function run(){
+  const name=(document.getElementById('name').value.trim()||'你');
+  const gender=document.getElementById('gender').value;
+  const date=document.getElementById('date').value;
+  const time=document.getElementById('time').value;
+  const tz=parseInt(document.getElementById('tz').value,10)||8;
+  const enteredYear=(document.getElementById('flowYear').value||'').trim();
+  let year=enteredYear?parseInt(enteredYear,10):null;
+
+  if(!date){alert('请先选择公历生日');return;}
+
+  // 使用本地时间，不再手动扣时区，避免生日被改动
+  const loc=new Date(date+'T'+(time||'12:00')+':00');
+  const y=loc.getFullYear(), m=loc.getMonth()+1, day=loc.getDate();
+  const hh=loc.getHours(), mm=loc.getMinutes(), ss=loc.getSeconds();
+
+  const solar=Solar.fromYmdHms(y,m,day,hh,mm,ss);
+  const lunar=solar.getLunar();
+  const ec=lunar.getEightChar();
+  const yearGZ=ec.getYear(), monthGZ=ec.getMonth(), dayGZ=ec.getDay();
+  const timeGZ=(time?ec.getTime():'（未知）');
+
+  if(!year){ year=(new Date()).getFullYear(); }
+  const liuYearGZ=Lunar.fromYmd(year,1,1).getYearInGanZhi();
+
+  const eight={y:yearGZ,m:monthGZ,d:dayGZ,t:(time?timeGZ:'')};
+  const sc=scoreFive(eight);
+  const rec=pickRec(sc);
+
+  // 排盘
+  const chart=[
+    `年柱：${yearGZ}　月柱：${monthGZ}　日柱：${dayGZ}　时柱：${timeGZ}`,
+    `生肖：${lunar.getYearShengXiao()}　纳音：${lunar.getYearNaYin()} / ${lunar.getMonthNaYin()} / ${lunar.getDayNaYin()}${time?(' / '+lunar.getTimeNaYin()):''}`,
+    `五行计分（简化计分·内部参考）：金${sc.金} 木${sc.木} 水${sc.水} 火${sc.火} 土${sc.土}`,
+    `流年（${year}）：${liuYearGZ}年`
+  ].join('\n');
+  document.getElementById('chart').textContent=chart;
+
+  // 标签
+  const charmSuggest=pickSome(CHARMS,2);
+  document.getElementById('tags').innerHTML=
+    `<span class="pill">偏旺：${rec.strong.join('/')||'—'}</span>
+     <span class="pill">偏弱：${rec.weak.join('/')||'—'}</span>
+     <span class="pill">挂件：${charmSuggest.join('、')}</span>
+     <span class="pill">本页为“八字五行解说”</span>`;
+
+  // 精油计划
+  const oilPlans=mkOilPlan(rec.weak);
+
+  // 标题：有年份 → “xxxx流年·五行解说”，否则 “八字·五行解说”
+  const titleText = enteredYear ? `${year}流年·五行解说` : `八字·五行解说`;
+  const header=`🌿 ${name}${gender?(' · '+gender):''}｜${titleText}`;
+
+  // 左右手
+  const leftRec=`左手（贵人·财运·表达）→ 以“补弱”为主：${rec.weak.map(k=>CRYSTALS[k][0]).join('、')||'白水晶'}，搭 紫水晶 稳频；关键时刻可加「${charmSuggest[0]||'紫水晶钱袋子'}」。`;
+  const rightRec=`右手（护身·边界·稳场）→ ${FEATURE_SET.护身.slice(0,3).join('、')} 打底，按需加 茶晶；需要强势守护时加「${charmSuggest[1]||'乾隆通宝古币'}」。`;
+
+  const modes=[
+`① 日常平衡
+- 串法：白水晶打底 + “补弱”各取1～2颗点睛（6mm 全珠更贴肤）
+- 说明：让能量均衡流动，不抢戏，适合全天候佩戴。`,
+`② 开运应事（面试/签约/谈价格）
+- 串法：以“财运/贵人”向为主：${FEATURE_SET.财运.slice(0,3).join('、')} + ${FEATURE_SET.贵人.slice(0,2).join('、')}
+- 点睛：加「${charmSuggest[0]||'金色福袋'}」稳资金流与人缘运。`,
+`③ 灵修/静心
+- 串法：白水晶 + 紫水晶（中心珠/钱袋子）
+- 说明：清脑、稳频率、帮助内在看见。`,
+`④ 应急护身（短期）
+- 串法：${FEATURE_SET.护身.slice(0,3).join('、')} + 茶晶
+- 说明：在人多/杂气环境快速撑起边界，事毕可换回日常款。`
+  ].join('\n\n');
+
+  const loveBlock=`🤝 人缘与感情（可选）
+- 人缘：${FEATURE_SET.人缘.join(' / ')}
+- 感情：${FEATURE_SET.感情.join(' / ')}
+- 桃花：${FEATURE_SET.桃花.join(' / ')}
+（粉晶贴肤更柔，初戴可配白水晶稳频）`;
+
+  const oilText=[
+    `10ml 复方使用说明（基底油建议荷荷巴 8ml）：`,
+    ...oilPlans.map(p=>`- ${p.name}：${p.desc}`),
+    `滴数范围：总计建议 40～45 滴；肌肤敏感可降至 30～35 滴。`
+  ].join('\n');
+
+  // 文案
+  const base=`公历生日：${y}-${two(m)}-${two(day)} ${time||'时间未知'}（UTC${tz>=0?'+':''}${tz}）
+年柱${yearGZ}｜月柱${monthGZ}｜日柱${dayGZ}｜时柱${time?timeGZ:'未知'}
+${year}年流年：${liuYearGZ}`;
+  const fiveBlock=`📊 五行结构解说（简化计分·内部参考）
+- 金${sc.金} 木${sc.木} 水${sc.水} 火${sc.火} 土${sc.土}
+- 偏旺：${rec.strong.join('/')||'—'}；偏弱：${rec.weak.join('/')||'—'}
+- 说明：本页为“八字五行解说”，结合流年仅作参考。`;
+  const crystals=`💎 水晶策略
+${rec.crystalLines}
+
+🖐 佩戴建议
+- ${leftRec}
+- ${rightRec}
+
+🧩 四种模式（按场景切换）
+${modes}
+
+${loveBlock}`;
+  const oils=`🌸 精油建议（10ml 配方，滚珠/点涂皆可）
+${oilText}`;
+  const tail=`🔖 挂件灵活用
+- 可选：${CHARMS.join('、')}
+- 原则：财运/人缘：钱袋/福袋/五帝钱；护身：貔貅/古币；静心：莲花牌；谈价格：算盘
+
+💬 温柔结语
+愿你被温柔以待，稳住节奏、慢慢向好。需要我微调串法或配方，随时发我。`;
+
+  const wa=[`🌿 ${name}${gender?(' · '+gender):''}｜${titleText}`,'',base,'',fiveBlock,'',crystals,'',oils,'',tail].join('\n');
+  document.getElementById('wa').value=wa;
+}
+
+function copyWA(){
+  const el=document.getElementById('wa'); el.select(); el.setSelectionRange(0, 99999);
+  document.execCommand('copy'); alert('已复制到剪贴板，可以直接贴到 WhatsApp。');
+}
+function downloadTxt(){
+  const blob=new Blob([document.getElementById('wa').value],{type:'text/plain;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='bazi_wa.txt'; a.click();
+}
+</script>
+</body>
+</html>
